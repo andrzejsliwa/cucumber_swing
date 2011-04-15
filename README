@@ -1,0 +1,19 @@
+install:
+
+  rvm install jruby
+  rvm jruby
+  rvm gemset create cucumber_for_java
+  bunlde install
+  jruby -S gem install celerity
+
+run:
+
+  rake cucumber        # Alias for cucumber:ok
+  rake cucumber:all    # Run all features
+  rake cucumber:clean  # Remove all temp file.
+  rake cucumber:ok     # Run features that should pass
+  rake cucumber:rerun  # Record failing features and run only them if any exist
+  rake cucumber:steps  # List all defined steps
+  rake cucumber:wip    # Run features that are being worked on
+  rake test_app        # Run test application
+

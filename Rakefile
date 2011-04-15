@@ -2,64 +2,71 @@ require 'rubygems'
 require 'cucumber'
 require 'cucumber/rake/task'
 
-Cucumber::Rake::Task.new(:features, 'Run all features on the test application') do |t|
-  if feature = ENV['ONLY']
-    t.cucumber_opts = "test/features/#{feature}.feature"
-  else
-    t.cucumber_opts = "test/features --format progress"
-  end
-  if ENV['RCOV']
-    t.rcov = true
-    t.rcov_opts = "--include test/features"
-  end
-end
-
 desc 'Run test application'
 task :test_app do
   `java -jar test/SwingSet2.jar`
 end
 
-def capture_steps
-  $steps = {}
-  ::Cucumber::StepDefinition.class_eval do
-    alias_method :old_initialize, :initialize
-    def initialize(regexp, &proc)
-      caller[2] =~/.+\/(.+)\./
-      $steps[$1] ||= []
-      $steps[$1] << regexp.to_s[7..-2]
-      old_initialize(regexp, &proc)
+namespace :cucumber do
+
+  Cucumber::Rake::Task.new(:ok, 'Run features that should pass') do |t|
+    t.fork = true # You may get faster startup if you set this to false
+    t.cucumber_opts = "test/features --format progress"
+    t.profile = 'default'
+  end
+
+  Cucumber::Rake::Task.new(:wip, 'Run features that are being worked on') do |t|
+    t.fork = true # You may get faster startup if you set this to false
+    t.cucumber_opts = "test/features --format progress"
+    t.profile = 'wip'
+  end
+
+  Cucumber::Rake::Task.new(:rerun, 'Record failing features and run only them if any exist') do |t|
+    t.fork = true # You may get faster startup if you set this to false
+    t.cucumber_opts = "test/features --format progress"
+    t.profile = 'rerun'
+  end
+
+  desc 'Run all features'
+  task :all => [:ok, :wip]
+
+  desc "Remove all temp file."
+  task :clean do
+    system "rm capybara-*.html cucumber.log"
+  end
+
+  desc 'List all defined steps'
+  task :steps do
+    require 'hirb'
+    extend Hirb::Console
+    puts "CUCUMBER steps:"
+    puts ""
+    step_definition_dir = "lib/swinger/step_definitions"
+
+    Dir.glob(File.join(step_definition_dir,'**/*.rb')).each do |step_file|
+
+      puts "File: #{step_file}"
+      puts ""
+      results = []
+      File.new(step_file).read.each_line.each_with_index do |line, number|
+
+        next unless line =~ /^\s*(?:Given|When|Then)\s+|\//
+        res = /(?:Given|When|Then)[\s\(]*\/(.*)\/([imxo]*)[\s\)]*do\s*(?:$|\|(.*)\|)/.match(line)
+        next unless res
+        matches = res.captures
+        results << OpenStruct.new(
+          :steps => matches[0],
+          :modifier => matches[1],
+          :args => matches[2]
+        )
+      end
+      table results, :resize => false, :fields=>[:steps, :modifier, :args]
+      puts ""
     end
   end
 end
 
-desc 'List all step definitions'
-task :steps do
-  capture_steps
-  require File.dirname(__FILE__) + '/lib/swinger'
-  $steps.keys.sort.each do |file|
-    puts file + ":"
-    $steps[file].sort.each { |s| puts "  " + s }
-    puts
-  end
-end
+desc 'Alias for cucumber:ok'
+task :cucumber => 'cucumber:ok'
 
-desc 'List all missing translations for LANG=xx'
-task :missing_i18n do
-  capture_steps
-  lang = ENV['LANG']
-  (puts ('Must specifiy LANG=xx'); return) if lang.nil? || lang == 'en'
-  
-  require File.dirname(__FILE__) + '/lib/swinger'
-  I18N.load(lang)
-  count = 0
-  $steps.keys.sort.each do |file|
-    puts "#{file}.#{lang}.i18n"
-    $steps[file].sort.each do |step|
-      (puts '  ' + step; count += 1) if I18N.missing_translation?(step)
-    end
-    puts
-  end
-  puts "#{count} #{lang} missing translation(s)."
-end
-
-task :default => :features
+task :default => :cucumber
